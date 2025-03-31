@@ -12,8 +12,7 @@ import "lib/openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {DeployBaseAccount} from "script/DeployBaseAccount.s.sol";
 import {UserOp} from "script/UserOp.s.sol";
-// import "lib/account-abstraction/contracts/interfaces/IEntryPoint.sol";
-import "src/interface/IEntryPoint.sol";
+import {IEntryPoint} from "src/interface/IEntryPoint.sol";
 
 contract TestBaseAccount is Test{
     using MessageHashUtils for bytes32;
@@ -26,6 +25,8 @@ contract TestBaseAccount is Test{
     address public user = makeAddr("user");
     uint256 public AMOUNT = 1e18;
     uint256 public ANVIL_CHAINID = 31337;
+    uint256 private constant SIG_VERIFICATION_SUCCESS = 0;
+    uint256 private constant SIG_VERIFICATION_FAILED = 1;
 
 
     function setUp() public {
@@ -37,6 +38,7 @@ contract TestBaseAccount is Test{
 
         vm.deal(address(baseAccount),AMOUNT);
     }
+
 
     function test_checkOwnerCanExecute() public {
         assert(usdc.balanceOf(address(baseAccount)) == 0);
@@ -59,23 +61,61 @@ contract TestBaseAccount is Test{
         vm.stopPrank();
     }
 
-    function test_varifyValidSigFromUserOp() public {
+    function test_getUserOpHashFunction() public {
 
         HelperConfig.NetworkConfig memory config = helperConfig.getAnvilConfig();
 
-        bytes memory functionData = abi.encodeWithSelector(ERC20Mock.mint.selector, address(baseAccount), AMOUNT);
-        bytes memory executionData = abi.encodeWithSelector(baseAccount.execute.selector, address(usdc),0,functionData);
+        bytes memory functionData = abi.encodeWithSelector(
+            usdc.mint.selector,
+            address(baseAccount),
+            AMOUNT
+        );
+        bytes memory executionData = abi.encodeWithSelector(
+            baseAccount.execute.selector,
+            address(usdc),
+            0,
+            functionData
+            );
 
-        PackedUserOperation memory userOps = userOp.generateSignedUserOp(executionData, config , address(baseAccount));
+        PackedUserOperation memory userOp = userOp.generateSignedUserOp(executionData, config, address(baseAccount));
 
-        // get the actual userOps signer from userOpHash -> ECDSA
-        bytes memory signature = userOps.signature;
-        bytes32 userOpHash = IEntryPoint(config.entryPoint).getUserOpHash(userOps);
+        bytes32 userOpHash = IEntryPoint(config.entryPoint).getUserOpHash(userOp);
 
-        address userOpsSigner = ECDSA.recover(userOpHash.toEthSignedMessageHash(),signature);
-        console.log("userOpSigner address:", userOpsSigner);
-        console.log("AA user who signed the userOps:", baseAccount.owner());
+        bytes32 digest = userOpHash.toEthSignedMessageHash();
+        address signer = ECDSA.recover(digest, userOp.signature);
 
-        assert(userOpsSigner == baseAccount.owner());
+        console.log("getUserOpFunction signer address ->", signer);
+        console.log("Actual userOp Signer ->", baseAccount.owner());
+    }
+
+    function test_validateUserOps() public {
+        // Arrange
+        assert(usdc.balanceOf(address(baseAccount)) == 0);
+
+        HelperConfig.NetworkConfig memory config = helperConfig.getAnvilConfig();
+
+        bytes memory functionData = abi.encodeWithSelector(
+            usdc.mint.selector,
+            address(baseAccount),
+            AMOUNT
+        );
+        bytes memory executionData = abi.encodeWithSelector(
+            baseAccount.execute.selector,
+            address(usdc),
+            0,
+            functionData
+            );
+
+        PackedUserOperation memory userOp = userOp.generateSignedUserOp(executionData, config, address(baseAccount));
+
+        bytes32 userOpHash = IEntryPoint(config.entryPoint).getUserOpHash(userOp).toEthSignedMessageHash();
+
+        // Act
+        vm.startPrank(baseAccount.owner());
+        uint256 validationData = baseAccount.validateUserOps(userOp, userOpHash);
+        vm.stopPrank();
+
+        // Assert
+        assert(validationData == SIG_VERIFICATION_SUCCESS);
     }
 }

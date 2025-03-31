@@ -107,5 +107,5 @@
    - https://eips.ethereum.org/EIPS/eip-4337 
    - https://ethereum.org/en/roadmap/account-abstraction/
 
-3. Blog to create AA from Scratch!!!
+3. Blog to create AA from Scratch(Alchemy)!!!
    - https://www.alchemy.com/blog/account-abstraction 

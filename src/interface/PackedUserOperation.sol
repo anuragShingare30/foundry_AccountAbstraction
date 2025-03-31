@@ -16,11 +16,19 @@ pragma solidity ^0.8.26;
  * @param signature             - Sender-verified signature over the entire request, the EntryPoint address and the chain ID.
  */
 struct PackedUserOperation {
+    // address sender; // baseaccount address
+    // uint256 nonce; //
+    // bytes initCode; 
+    // bytes callData; // main param to execute function
+    // bytes paymasterAndData; // contains paymaster info
+    // bytes signature; // the signer of the userOps
     address sender;
     uint256 nonce;
     bytes initCode;
     bytes callData;
+    bytes32 accountGasLimits;
+    uint256 preVerificationGas;
+    bytes32 gasFees;
     bytes paymasterAndData;
-    address paymaster;
     bytes signature;
 }

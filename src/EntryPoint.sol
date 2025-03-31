@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "src/interface/PackedUserOperation.sol";
-import "src/interface/IBaseAccount.sol";
-import "src/interface/IBaseAccountExecute.sol";
+// import "src/interface/PackedUserOperation.sol";
+import "lib/account-abstraction/contracts/interfaces/PackedUserOperation.sol";
+import {IBaseAccount} from "src/interface/IBaseAccount.sol";
+import {IBaseAccountExecute} from "src/interface/IBaseAccountExecute.sol";
 import "lib/openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils.sol";
 import "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 import {ReentrancyGuard } from "lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+import {EIP712} from "lib/openzeppelin-contracts/contracts/utils/cryptography/EIP712.sol";
+import {Eip7702Support} from "lib/account-abstraction/contracts/core/Eip7702Support.sol";
 
-contract EntryPoint is ReentrancyGuard {
+
+contract EntryPoint is ReentrancyGuard,EIP712 {
+    using MessageHashUtils for bytes32;
     /////////////////////
     // Error //
     /////////////////////
@@ -37,6 +42,9 @@ contract EntryPoint is ReentrancyGuard {
     /////////////////////
     // External Functions //
     /////////////////////
+    string constant internal DOMAIN_NAME = "ERC4337";
+    string constant internal DOMAIN_VERSION = "1";
+    constructor() EIP712(DOMAIN_NAME, DOMAIN_VERSION){}
 
     /**
      * Execute a batch of UserOperations.
@@ -192,17 +200,39 @@ contract EntryPoint is ReentrancyGuard {
     function getUserOpHash(
         PackedUserOperation memory userOp
     ) public view returns(bytes32){
-        return keccak256(
-            abi.encode(
-                userOp.sender,
-                userOp.nonce,
-                keccak256(userOp.initCode),
-                keccak256(userOp.callData),
-                keccak256(userOp.paymasterAndData),
-                userOp.paymaster,
-                keccak256(userOp.signature),
-                address(this)
-            )
-        );
+        bytes32 overrideInitCodeHash = Eip7702Support._getEip7702InitCodeHashOverride(userOp);
+        return
+            MessageHashUtils.toTypedDataHash(getDomainSeparatorV4(), userOp.hash(overrideInitCodeHash));
+        // return keccak256(
+        //     abi.encode(
+        //         // userOp.sender,
+        //         // userOp.nonce,
+        //         // keccak256(userOp.initCode),
+        //         // keccak256(userOp.callData),
+        //         // keccak256(userOp.paymasterAndData),
+        //         // keccak256(userOp.signature),
+        //         // address(this),
+        //         // block.chainid
+        //         userOp.sender,
+        //         userOp.nonce,
+        //         keccak256(userOp.initCode),
+        //         keccak256(userOp.callData),
+        //         userOp.accountGasLimits,
+        //         userOp.preVerificationGas,
+        //         userOp.gasFees,
+        //         keccak256(userOp.paymasterAndData),
+        //         keccak256(userOp.signature),
+        //         address(this),
+        //         block.chainid
+        //     )
+        // );
+    }
+
+    /////////////////////
+    // Helper Functions //
+    /////////////////////
+
+    function getDomainSeparatorV4() public virtual view returns (bytes32) {
+        return _domainSeparatorV4();
     }
 }

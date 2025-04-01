@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Test,console} from "lib/forge-std/src/Test.sol";
+import {Test} from "lib/forge-std/src/Test.sol";
+import {console} from "lib/forge-std/src/console.sol";
 import "lib/forge-std/src/Vm.sol";
 import {BaseAccount} from "src/BaseAccount.sol";
 import {EntryPoint} from "src/EntryPoint.sol";
@@ -104,7 +105,7 @@ contract TestBaseAccount is Test{
             address(usdc),
             0,
             functionData
-            );
+        );
 
         PackedUserOperation memory userOp = userOp.generateSignedUserOp(executionData, config, address(baseAccount));
 
@@ -117,5 +118,59 @@ contract TestBaseAccount is Test{
 
         // Assert
         assert(validationData == SIG_VERIFICATION_SUCCESS);
+    }
+
+    function test_checkUserOp() public {
+        HelperConfig.NetworkConfig memory config = helperConfig.getAnvilConfig();
+
+        bytes memory functionData = abi.encodeWithSelector(
+            usdc.mint.selector,
+            address(baseAccount),
+            AMOUNT
+        );
+        bytes memory executionData = abi.encodeWithSelector(
+            baseAccount.execute.selector,
+            address(usdc),
+            0,
+            functionData
+        );
+
+        PackedUserOperation memory userOp = userOp.generateSignedUserOp(executionData, config, address(baseAccount));
+
+        bytes memory callData = userOp.callData;
+        console.logBytes(callData);
+        console.log(userOp.sender);
+        console.log(address(baseAccount));
+        console.log(baseAccount.owner());
+    }
+
+    function test_checkHandleOps() public {
+        // Arrange
+        assert(usdc.balanceOf(address(baseAccount)) == 0);
+
+        HelperConfig.NetworkConfig memory config = helperConfig.getAnvilConfig();
+
+        bytes memory functionData = abi.encodeWithSelector(
+            usdc.mint.selector,
+            address(baseAccount),
+            AMOUNT
+        );
+        bytes memory executionData = abi.encodeWithSelector(
+            baseAccount.execute.selector,
+            address(usdc),
+            0,
+            functionData
+        );
+
+        PackedUserOperation memory userOp = userOp.generateSignedUserOp(executionData, config, address(baseAccount));
+
+        // Act
+        vm.startPrank(baseAccount.owner());
+        (uint256 validationData) = IEntryPoint(config.entryPoint).handleOperation(userOp, payable(user));
+        vm.stopPrank();
+
+        // Assert
+        // assert(usdc.balanceOf(address(baseAccount)) == AMOUNT);
+        console.log("ValidationData :",validationData);
     }
 }

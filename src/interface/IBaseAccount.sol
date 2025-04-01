@@ -6,8 +6,7 @@ import "src/interface/PackedUserOperation.sol";
 interface IBaseAccount {
 
     function validateUserOps(
-        PackedUserOperation memory userOp,
-        bytes32 userOpHash,
-        uint256 missingAccountFunds
+        PackedUserOperation calldata userOp,
+        bytes32 userOpHash
     ) external returns(uint256 validationData);
 }

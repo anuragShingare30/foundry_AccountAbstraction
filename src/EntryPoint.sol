@@ -10,16 +10,20 @@ import "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 import {ReentrancyGuard } from "lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import {EIP712} from "lib/openzeppelin-contracts/contracts/utils/cryptography/EIP712.sol";
 import {Eip7702Support} from "lib/account-abstraction/contracts/core/Eip7702Support.sol";
-
+import {UserOperationLib} from "lib/account-abstraction/contracts/core/UserOperationLib.sol";
+import {IEntryPoint} from "src/interface/IEntryPoint.sol";
+import {console} from "lib/forge-std/src/console.sol";
 
 contract EntryPoint is ReentrancyGuard,EIP712 {
     using MessageHashUtils for bytes32;
+    using UserOperationLib for PackedUserOperation;
     /////////////////////
     // Error //
     /////////////////////
     error EntryPoint_validateUserOpFailed(bytes returnData, address sender);
     error EntryPoint_validationOfUserFailedForValidationData(uint256 validationData);
     error EntryPoint_ValidationFailedDuringExecution(bytes returnData);
+    error EntryPoint_executionFailed(bytes returnData);
 
     /////////////////////
     // Type Declaration //
@@ -34,6 +38,14 @@ contract EntryPoint is ReentrancyGuard,EIP712 {
 
 
     /////////////////////
+    // State Variables //
+    /////////////////////
+    string constant internal DOMAIN_NAME = "ERC4337";
+    string constant internal DOMAIN_VERSION = "1";
+    uint256 private constant SIG_VALIDATION_FAILED = 1;
+    uint256 private constant SIG_VALIDATION_SUCCESS = 0;
+
+    /////////////////////
     // Events //
     /////////////////////
     event EntryPoint_ExecutionFailed(address sender);
@@ -42,8 +54,7 @@ contract EntryPoint is ReentrancyGuard,EIP712 {
     /////////////////////
     // External Functions //
     /////////////////////
-    string constant internal DOMAIN_NAME = "ERC4337";
-    string constant internal DOMAIN_VERSION = "1";
+    
     constructor() EIP712(DOMAIN_NAME, DOMAIN_VERSION){}
 
     /**
@@ -77,11 +88,65 @@ contract EntryPoint is ReentrancyGuard,EIP712 {
         // _payToExecutor(beneficiaryAddress,amountToBeSent);
     }
 
+    function handleOperation(
+        PackedUserOperation calldata userOp,
+        address payable beneficiaryAddress
+    ) external nonReentrant() returns(uint256){
+        
+        // validate user
+        uint256 validationData = _checkValidityForUserOp(userOp);
+
+        // execute the function
+        if(validationData == 0 || validationData == 1){
+            _executeCallData(userOp);
+        }
+
+        // pay the TNX fee to beneficiary
+
+        return validationData;
+    }
+
 
     /////////////////////
     // Internal Functions //
     /////////////////////
     
+    function _checkValidityForUserOp(
+        PackedUserOperation calldata userOp
+    ) internal returns(uint256 validationData){
+        bytes32 userOpHash = getUserOpHash(userOp);
+        bytes memory functionData = abi.encodeWithSelector(
+            IBaseAccount.validateUserOps.selector,
+            userOp,
+            userOpHash
+        );
+        console.log("Current msg.sender",msg.sender);
+        (bool success, bytes memory returnData) = payable(msg.sender).staticcall(functionData);
+        if(!success){
+            if (returnData.length > 0) {
+            assembly {
+                let returndata_size := mload(returnData)
+                revert(add(32, returnData), returndata_size)
+            }
+        } else {
+            revert EntryPoint_validateUserOpFailed(returnData,msg.sender);
+            }
+        }
+        validationData = abi.decode(returnData,(uint256));
+    }
+
+    function _executeCallData(
+        PackedUserOperation memory userOp
+    ) internal {
+        bytes memory functionData = userOp.callData;
+        address sender = userOp.sender;
+        (bool success,bytes memory returnData) = payable(sender).call{value:0}(
+            functionData
+        );
+        if(!success){
+            revert EntryPoint_executionFailed(returnData);
+        }
+    }
 
     /**
      * validate all the userOp one-by-one -> those who fails validation discard them from array
@@ -111,7 +176,7 @@ contract EntryPoint is ReentrancyGuard,EIP712 {
     }
 
     function _validateUserOp(
-        PackedUserOperation memory userOp,
+        PackedUserOperation calldata userOp,
         UserOpInfo memory opInfo,
         uint256 opIndex
     ) internal returns(uint256 validationData){
@@ -198,21 +263,15 @@ contract EntryPoint is ReentrancyGuard,EIP712 {
     /////////////////////
 
     function getUserOpHash(
-        PackedUserOperation memory userOp
+        PackedUserOperation calldata userOp
     ) public view returns(bytes32){
+
         bytes32 overrideInitCodeHash = Eip7702Support._getEip7702InitCodeHashOverride(userOp);
         return
             MessageHashUtils.toTypedDataHash(getDomainSeparatorV4(), userOp.hash(overrideInitCodeHash));
+        
         // return keccak256(
         //     abi.encode(
-        //         // userOp.sender,
-        //         // userOp.nonce,
-        //         // keccak256(userOp.initCode),
-        //         // keccak256(userOp.callData),
-        //         // keccak256(userOp.paymasterAndData),
-        //         // keccak256(userOp.signature),
-        //         // address(this),
-        //         // block.chainid
         //         userOp.sender,
         //         userOp.nonce,
         //         keccak256(userOp.initCode),

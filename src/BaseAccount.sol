@@ -34,7 +34,7 @@ contract BaseAccount is Ownable {
     //////////////////////////
     modifier NotFromOwnerOfBaseAccount(){
         if(msg.sender != owner()){
-            revert BaseAccount_NotFromOwnerOfBaseAccount();
+            revert BaseAccount_NotFromOwnerOfBaseAccount(); 
         }
         _;
     }
@@ -62,7 +62,7 @@ contract BaseAccount is Ownable {
      @return validationData After successfull validation returns 0 else 1
      */
     function validateUserOps(
-        PackedUserOperation memory userOp,
+        PackedUserOperation calldata userOp,
         bytes32 userOpHash
     ) external NotFromOwnerOfBaseAccount() returns(uint256 validationData){
         validationData = _validateUserOp(userOp,userOpHash);
@@ -102,8 +102,8 @@ contract BaseAccount is Ownable {
         PackedUserOperation memory userOp,
         bytes32 userOpHash
     ) internal returns(uint256){
-        // bytes32 userOpHashData = MessageHashUtils.toEthSignedMessageHash(userOpHash);
-        address signer = ECDSA.recover(userOpHash.toEthSignedMessageHash(), userOp.signature);
+        bytes32 userOpHashData = MessageHashUtils.toEthSignedMessageHash(userOpHash);
+        address signer = ECDSA.recover(userOpHashData, userOp.signature);
 
         if(signer != owner()){
             return SIG_VALIDATION_FAILED;

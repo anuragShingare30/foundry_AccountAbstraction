@@ -23,14 +23,26 @@ contract UserOp is Script {
         HelperConfig config;
     }
 
-
+    /**
+     @notice generateSignedUserOp function
+     * This function will generate the userOps
+     * If paymaster is present pass the paymaster address
+     * Else keep the field  as address(0)
+     */
     function generateSignedUserOp(
         bytes memory executionData,
         HelperConfig.NetworkConfig memory config,
-        address baseAccount
+        address baseAccount,
+        address paymaster
     ) public returns(PackedUserOperation memory){
+
+        bytes memory paymasterAndData = abi.encodePacked(
+            paymaster,
+            keccak256(abi.encode(10))
+        );
+
         uint256 nonce = vm.getNonce(baseAccount)-1;
-        PackedUserOperation memory userOp = _generateUnSignedUserOp(baseAccount, nonce, executionData);
+        PackedUserOperation memory userOp = _generateUnSignedUserOp(baseAccount, nonce, executionData,paymasterAndData);
 
         // get the userOpHash
         bytes32 userOpHash = IEntryPoint(config.entryPoint).getUserOpHash(userOp);
@@ -52,7 +64,8 @@ contract UserOp is Script {
     function _generateUnSignedUserOp(
         address sender,
         uint256 nonce,
-        bytes memory functionData
+        bytes memory functionData,
+        bytes memory paymasterAndData
     ) internal returns(PackedUserOperation memory){
         
         uint128 verificationGasLimit = 16777216;
@@ -74,8 +87,9 @@ contract UserOp is Script {
             accountGasLimits: bytes32(uint256(verificationGasLimit) << 128 | callGasLimit),
             preVerificationGas: verificationGasLimit,
             gasFees: bytes32(uint256(maxPriorityFeePerGas) << 128 | maxFeePerGas),
-            paymasterAndData: hex"",
+            paymasterAndData: paymasterAndData,
             signature: hex""
+            // paymaster:address(0)
         });
     }
 }

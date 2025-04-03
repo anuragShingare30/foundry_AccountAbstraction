@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-// import "src/interface/PackedUserOperation.sol";
+
 import "lib/account-abstraction/contracts/interfaces/PackedUserOperation.sol";
 import {IBaseAccount} from "src/interface/IBaseAccount.sol";
+import {IBasePaymaster} from "src/interface/IBasePaymaster.sol";
 import {IBaseAccountExecute} from "src/interface/IBaseAccountExecute.sol";
 import "lib/openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils.sol";
 import "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
@@ -24,6 +25,9 @@ contract EntryPoint is ReentrancyGuard,EIP712 {
     error EntryPoint_validationOfUserFailedForValidationData(uint256 validationData);
     error EntryPoint_ValidationFailedDuringExecution(bytes returnData);
     error EntryPoint_executionFailed(bytes returnData);
+    error EntryPoint_zeroAmountNotAllowed();
+    error EntryPoint_FailedToWithDrawAmount();
+    error EntryPoint_InsufficientBalanceToWithDraw();
 
     /////////////////////
     // Type Declaration //
@@ -35,6 +39,8 @@ contract EntryPoint is ReentrancyGuard,EIP712 {
         bytes32 userOpHash; // main
         uint256 gasFees;
     }
+
+    mapping (address paymaster => uint256 totalDeposit) public immutable i_deposit;
 
 
     /////////////////////
@@ -92,9 +98,15 @@ contract EntryPoint is ReentrancyGuard,EIP712 {
         PackedUserOperation calldata userOp,
         address payable beneficiaryAddress
     ) external nonReentrant() returns(uint256){
-        
+        uint256 validationData;
         // validate user
-        uint256 validationData = _checkValidityForUserOp(userOp);
+        if(userOp.paymasterAndData.length>0){
+            validationData = _checkValidationForPaymasterOp(userOp);
+        }
+        else{
+            validationData = _checkValidityForUserOp(userOp);
+        }
+        
 
         // execute the function
         if(validationData == 0 || validationData == 1){
@@ -104,6 +116,29 @@ contract EntryPoint is ReentrancyGuard,EIP712 {
         // pay the TNX fee to beneficiary
 
         return validationData;
+    }
+
+    function deposit(
+        address paymasterAddress
+    ) external payable{
+        if(msg.value <= 0){
+            revert EntryPoint_zeroAmountNotAllowed();
+        }
+        uint256 depositedAmount = msg.value;
+        i_deposit[paymasterAddress] += depositedAmount;
+    }
+
+    function withDrawDeposit(
+        uint256 withDrawAmount
+    ) external payable {
+        if(i_deposit[msg.sender] < withDrawAmount){
+            revert EntryPoint_InsufficientBalanceToWithDraw();
+        }
+        i_deposit[msg.sender] -= withDrawAmountl;
+        (bool success,) = payable(msg.sender).call{value:withDrawAmount}();
+        if(!success){
+            revert EntryPoint_FailedToWithDrawAmount();
+        }
     }
 
 
@@ -117,6 +152,30 @@ contract EntryPoint is ReentrancyGuard,EIP712 {
         bytes32 userOpHash = getUserOpHash(userOp);
         bytes memory functionData = abi.encodeWithSelector(
             IBaseAccount.validateUserOps.selector,
+            userOp,
+            userOpHash
+        );
+        console.log("Current msg.sender",msg.sender);
+        (bool success, bytes memory returnData) = payable(msg.sender).staticcall(functionData);
+        if(!success){
+            if (returnData.length > 0) {
+            assembly {
+                let returndata_size := mload(returnData)
+                revert(add(32, returnData), returndata_size)
+            }
+        } else {
+            revert EntryPoint_validateUserOpFailed(returnData,msg.sender);
+            }
+        }
+        validationData = abi.decode(returnData,(uint256));
+    }
+
+    function _checkValidationForPaymasterOp(
+        PackedUserOperation calldata userOp
+    ) internal returns(uint256 validationData){
+        bytes32 userOpHash = getUserOpHash(userOp);
+        bytes memory functionData = abi.encodeWithSelector(
+            IBasePaymaster.validatePaymasterUserOp.selector,
             userOp,
             userOpHash
         );
@@ -261,6 +320,10 @@ contract EntryPoint is ReentrancyGuard,EIP712 {
     /////////////////////
     // Getter Functions //
     /////////////////////
+
+    function getDepositOfUser(address user) public view returns(uint256){
+        return i_deposit[user];
+    }
 
     function getUserOpHash(
         PackedUserOperation calldata userOp

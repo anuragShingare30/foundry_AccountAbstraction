@@ -78,7 +78,7 @@ contract TestBaseAccount is Test{
             functionData
             );
 
-        PackedUserOperation memory userOp = userOp.generateSignedUserOp(executionData, config, address(baseAccount));
+        PackedUserOperation memory userOp = userOp.generateSignedUserOp(executionData, config, address(baseAccount),address(0));
 
         bytes32 userOpHash = IEntryPoint(config.entryPoint).getUserOpHash(userOp);
 
@@ -107,7 +107,7 @@ contract TestBaseAccount is Test{
             functionData
         );
 
-        PackedUserOperation memory userOp = userOp.generateSignedUserOp(executionData, config, address(baseAccount));
+        PackedUserOperation memory userOp = userOp.generateSignedUserOp(executionData, config, address(baseAccount),address(0));
 
         bytes32 userOpHash = IEntryPoint(config.entryPoint).getUserOpHash(userOp).toEthSignedMessageHash();
 
@@ -135,7 +135,7 @@ contract TestBaseAccount is Test{
             functionData
         );
 
-        PackedUserOperation memory userOp = userOp.generateSignedUserOp(executionData, config, address(baseAccount));
+        PackedUserOperation memory userOp = userOp.generateSignedUserOp(executionData, config, address(baseAccount),address(0));
 
         bytes memory callData = userOp.callData;
         console.logBytes(callData);
@@ -162,7 +162,7 @@ contract TestBaseAccount is Test{
             functionData
         );
 
-        PackedUserOperation memory userOp = userOp.generateSignedUserOp(executionData, config, address(baseAccount));
+        PackedUserOperation memory userOp = userOp.generateSignedUserOp(executionData, config, address(baseAccount),address(0));
 
         // Act
         vm.startPrank(baseAccount.owner());
@@ -172,5 +172,79 @@ contract TestBaseAccount is Test{
         // Assert
         // assert(usdc.balanceOf(address(baseAccount)) == AMOUNT);
         console.log("ValidationData :",validationData);
+    }
+
+    // Check the paymaster contract
+    function test_IncludePaymasterDataInUserOp() public {
+        // Arrange
+        HelperConfig.NetworkConfig memory config = helperConfig.getAnvilConfig();
+
+        bytes memory functionData = abi.encodeWithSelector(
+            usdc.mint.selector,
+            address(baseAccount),
+            AMOUNT
+        );
+        bytes memory executionData = abi.encodeWithSelector(
+            baseAccount.execute.selector,
+            address(usdc),
+            0,
+            functionData
+        );
+
+        // append the paymaster address
+        address paymaster = 0xECe6dcc60bBDfE74a67CB26b1B83af791Aa22AE6;
+        PackedUserOperation memory userOp = userOp.generateSignedUserOp(executionData, config, address(baseAccount),paymaster);
+
+        bytes memory paymasterAndData = userOp.paymasterAndData;
+
+        // decode the paymasterdata to get the paymaster address
+        require(paymasterAndData.length >= 20, "Invalid paymasterAndData");
+        address decodedPaymaster;
+         assembly {
+        decodedPaymaster := mload(add(paymasterAndData, 20))
+        }   
+        
+        console.log("Decoded paymaster address is:", decodedPaymaster);
+        assert(decodedPaymaster == paymaster);
+    }
+
+
+    function test_checkHandleOperationForPaymaster() public {
+        // Arrange
+        HelperConfig.NetworkConfig memory config = helperConfig.getAnvilConfig();
+
+        bytes memory functionData = abi.encodeWithSelector(
+            usdc.mint.selector,
+            address(baseAccount),
+            AMOUNT
+        );
+        bytes memory executionData = abi.encodeWithSelector(
+            baseAccount.execute.selector,
+            address(usdc),
+            0,
+            functionData
+        );
+
+        // append the paymaster address
+        address paymaster = 0xECe6dcc60bBDfE74a67CB26b1B83af791Aa22AE6;
+        PackedUserOperation memory userOp = userOp.generateSignedUserOp(executionData, config, address(baseAccount),paymaster);
+
+        // Act
+        vm.startPrank(baseAccount.owner());
+        (uint256 validationData) = IEntryPoint(config.entryPoint).handleOperation(userOp, payable(user));
+        vm.stopPrank();
+
+        bytes memory paymasterAndData = userOp.paymasterAndData;
+
+        // decode the paymasterdata to get the paymaster address
+        require(paymasterAndData.length >= 20, "Invalid paymasterAndData");
+        address decodedPaymaster;
+        assembly {
+        decodedPaymaster := mload(add(paymasterAndData, 20))
+        }         
+
+        // Assert
+        console.log("Validation Data:", validationData);
+        console.log("Decoded paymaster address:",decodedPaymaster);
     }
 }

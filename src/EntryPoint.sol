@@ -40,7 +40,7 @@ contract EntryPoint is ReentrancyGuard,EIP712 {
         uint256 gasFees;
     }
 
-    mapping (address paymaster => uint256 totalDeposit) public immutable i_deposit;
+    mapping (address paymaster => uint256 totalDeposit) public i_deposit;
 
 
     /////////////////////
@@ -134,8 +134,8 @@ contract EntryPoint is ReentrancyGuard,EIP712 {
         if(i_deposit[msg.sender] < withDrawAmount){
             revert EntryPoint_InsufficientBalanceToWithDraw();
         }
-        i_deposit[msg.sender] -= withDrawAmountl;
-        (bool success,) = payable(msg.sender).call{value:withDrawAmount}();
+        i_deposit[msg.sender] -= withDrawAmount;
+        (bool success,) = payable(msg.sender).call{value:withDrawAmount}("");
         if(!success){
             revert EntryPoint_FailedToWithDrawAmount();
         }

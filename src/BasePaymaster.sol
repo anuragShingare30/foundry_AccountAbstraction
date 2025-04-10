@@ -21,10 +21,20 @@ contract BasePaymaster is Ownable {
         _;
     }
 
+    ////////////////////////
+    // EXTERNAL FUNCTION //
+    ////////////////////////
+
     constructor(address _entryPoint) Ownable(msg.sender){
         i_entryPoint = EntryPoint(_entryPoint);
     }
 
+    /**
+     * @notice validatePaymasterUserOp function
+     * This function validates the userOps if paymaster data is present in userOps
+     * userOps contains an field for paymaster data -> paymasterAndData
+     * Function will validate the signer for userOps and validate the sender for gas payment
+     */
     function validatePaymasterUserOp(
         PackedUserOperation calldata userOp,
         bytes32 userOpHash
@@ -36,6 +46,10 @@ contract BasePaymaster is Ownable {
         return address(i_entryPoint);
     }
 
+
+    //////////////////////
+    // INTERNAL FUNCTION //
+    //////////////////////
     function _validateUserOp(
         PackedUserOperation memory userOp,
         bytes32 userOpHash

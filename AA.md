@@ -23,10 +23,10 @@
 
 1. **`UserOperation`**:
    - This are `transaction objects` that are used to execute transactions with contract accounts. 
-   - UserOp struct contains  ->> sender address, nonce, bytes functionData, signature...
+   - UserOp struct contains  ->> sender(baseAccount) address, nonce, bytes functionData, signature, paymaster calldata(first 20-bytes is paymaster address!!!)
    - `sender` -> address of the smart contract account
    - `functionData` -> Data that's passed to the sender for execution (function selector!!!)
-
+   - `paymaster calldata` -> Contains all info. for paymaster address and function (first 20-bytes is paymaster address!!!)
 
 
 2. **`UserOperation mempool(Bundlers)`**: 
@@ -68,7 +68,14 @@
    - one to verify signatures, and another to process transactions.
 
 
-7. **`Aggregrator(optinal)`**
+7. **`Aggregrator(optional)`**
+
+
+
+8. **`Important Points`**:
+   - **Note** -> `verifyUserOps() and execute()` will only be called by entryPoint Contract or baseAccount owner
+   - **Note** -> entryPoint will verifies userOps one-by-one and once verified it will execute the function one-by-one!!!
+   -  This will avoid the `storage collision and verification clashes of userOps` during verification!!!
 
 
 
@@ -97,15 +104,15 @@
 ## Sources
 
 
-1. Account abstraction github repo!!!
+1. **Account abstraction github repo!!!**
    - https://github.com/eth-infinitism/account-abstraction
    - https://github.com/stackup-wallet
 
-2. Blogs and articles for AA
+2. **Blogs and articles for AA**
    - https://www.erc4337.io/docs
    - https://www.cyfrin.io/blog/what-is-blockchain-account-abstraction-a-5-minute-guide
    - https://eips.ethereum.org/EIPS/eip-4337 
    - https://ethereum.org/en/roadmap/account-abstraction/
 
-3. Blog to create AA from Scratch(Alchemy)!!!
+3. **Blog to create AA from Scratch(Alchemy)!!!**
    - https://www.alchemy.com/blog/account-abstraction

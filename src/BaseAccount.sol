@@ -7,6 +7,11 @@ import "lib/openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils
 import "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 import {EntryPoint} from "src/EntryPoint.sol";
 
+/**
+ * @title BaseAccount
+ * @author 
+ * @notice This is the base account contract that will be used to create the account contract                               
+ */
 
 contract BaseAccount is Ownable {
     using MessageHashUtils for bytes32;
@@ -110,5 +115,4 @@ contract BaseAccount is Ownable {
         }
         return SIG_VALIDATION_SUCCESS;
     }
-
 }
